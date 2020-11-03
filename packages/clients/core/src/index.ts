@@ -1,3 +1,4 @@
+import { EventEmitter } from "events";
 import {
   IConnector,
   IConnectorOpts,
@@ -44,6 +45,7 @@ import {
   mobileLinkChoiceKey,
   isMobile,
   removeLocal,
+  isJsonRpcRequest,
 } from "@walletconnect/utils";
 import SocketTransport from "@walletconnect/socket-transport";
 import {
@@ -61,7 +63,6 @@ import {
   ERROR_QRCODE_MODAL_NOT_PROVIDED,
   ERROR_QRCODE_MODAL_USER_CLOSED,
 } from "./errors";
-import EventManager from "./events";
 import SessionStorage from "./storage";
 
 // -- Connector ------------------------------------------------------------ //
@@ -103,7 +104,7 @@ class Connector implements IConnector {
 
   private _cryptoLib: ICryptoLib;
   private _transport: ITransportLib;
-  private _eventManager: EventManager = new EventManager();
+  private _events = new EventEmitter();
   private _sessionStorage: ISessionStorage | undefined;
 
   // -- qrcodeModal ----------------------------------------------------- //
@@ -363,11 +364,7 @@ class Connector implements IConnector {
   // -- public ---------------------------------------------------------- //
 
   public on(event: string, callback: (error: Error | null, payload: any | null) => void): void {
-    const eventEmitter = {
-      event,
-      callback,
-    };
-    this._eventManager.subscribe(eventEmitter);
+    this._events.on(event, payload => callback(null, payload));
   }
 
   public async createInstantRequest(instantRequest: Partial<IJsonRpcRequest>): Promise<void> {
@@ -387,7 +384,7 @@ class Connector implements IConnector {
     this.handshakeId = request.id;
     this.handshakeTopic = uuid();
 
-    this._eventManager.trigger({
+    this._events.emit("display_uri", {
       event: "display_uri",
       params: [this.uri],
     });
@@ -473,7 +470,7 @@ class Connector implements IConnector {
       topic: this.handshakeTopic,
     });
 
-    this._eventManager.trigger({
+    this._events.emit("display_uri", {
       event: "display_uri",
       params: [this.uri],
     });
@@ -509,7 +506,7 @@ class Connector implements IConnector {
 
     this._connected = true;
     this._setStorageSession();
-    this._eventManager.trigger({
+    this._events.emit("connect", {
       event: "connect",
       params: [
         {
@@ -538,7 +535,7 @@ class Connector implements IConnector {
     this._sendResponse(response);
 
     this._connected = false;
-    this._eventManager.trigger({
+    this._events.emit("disconnect", {
       event: "disconnect",
       params: [{ message }],
     });
@@ -570,7 +567,7 @@ class Connector implements IConnector {
 
     this._sendSessionRequest(request, "Session update rejected");
 
-    this._eventManager.trigger({
+    this._events.emit("session_update", {
       event: "session_update",
       params: [
         {
@@ -866,7 +863,7 @@ class Connector implements IConnector {
     if (this._connected) {
       this._connected = false;
     }
-    this._eventManager.trigger({
+    this._events.emit("disconnect", {
       event: "disconnect",
       params: [{ message }],
     });
@@ -896,7 +893,7 @@ class Connector implements IConnector {
             this.peerMeta = sessionParams.peerMeta;
           }
 
-          this._eventManager.trigger({
+          this._events.emit("connect", {
             event: "connect",
             params: [
               {
@@ -915,7 +912,7 @@ class Connector implements IConnector {
             this.accounts = sessionParams.accounts;
           }
 
-          this._eventManager.trigger({
+          this._events.emit("session_update", {
             event: "session_update",
             params: [
               {
@@ -956,7 +953,11 @@ class Connector implements IConnector {
       | null = await this._decrypt(encryptionPayload);
 
     if (payload) {
-      this._eventManager.trigger(payload);
+      if (isJsonRpcRequest(payload)) {
+        this._events.emit("call_request", payload);
+      } else if (isJsonRpcResponseSuccess(payload) || isJsonRpcResponseError(payload)) {
+        this._events.emit(`response:${payload.id}`, payload);
+      }
     }
   }
 
@@ -1011,7 +1012,7 @@ class Connector implements IConnector {
         this._qrcodeModal.open(
           this.uri,
           () => {
-            this._eventManager.trigger({
+            this._events.emit("modal_closed", {
               event: "modal_closed",
               params: [],
             });
@@ -1029,7 +1030,7 @@ class Connector implements IConnector {
 
     this.on("wc_sessionRequest", (error, payload) => {
       if (error) {
-        this._eventManager.trigger({
+        this._events.emit("error", {
           event: "error",
           params: [
             {
@@ -1047,7 +1048,7 @@ class Connector implements IConnector {
         ...payload,
         method: "session_request",
       };
-      this._eventManager.trigger(internalPayload);
+      this._events.emit("session_request", internalPayload);
     });
 
     this.on("wc_sessionUpdate", (error, payload) => {
@@ -1064,15 +1065,15 @@ class Connector implements IConnector {
     );
 
     this._transport.on("open", () =>
-      this._eventManager.trigger({ event: "transport_open", params: [] }),
+      this._events.emit("transport_open", { event: "transport_open", params: [] }),
     );
 
     this._transport.on("close", () =>
-      this._eventManager.trigger({ event: "transport_close", params: [] }),
+      this._events.emit("transport_close", { event: "transport_close", params: [] }),
     );
 
     this._transport.on("error", () =>
-      this._eventManager.trigger({
+      this._events.emit("transport_error", {
         event: "transport_error",
         params: ["Websocket connection failed"],
       }),

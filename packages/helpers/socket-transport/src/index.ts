@@ -1,10 +1,11 @@
+import { EventEmitter } from "events";
 import {
   ISocketMessage,
-  ITransportEvent,
   INetworkMonitor,
   ITransportLib,
   ISocketTransportOptions,
 } from "@walletconnect/types";
+
 import NetworkMonitor from "./network";
 
 // @ts-ignore
@@ -19,7 +20,7 @@ class SocketTransport implements ITransportLib {
   private _socket: WebSocket | null;
   private _nextSocket: WebSocket | null;
   private _queue: ISocketMessage[] = [];
-  private _events: ITransportEvent[] = [];
+  private _events = new EventEmitter();
   private _subscriptions: string[] = [];
 
   // -- constructor ----------------------------------------------------- //
@@ -115,7 +116,7 @@ class SocketTransport implements ITransportLib {
   }
 
   public on(event: string, callback: (payload: any) => void) {
-    this._events.push({ event, callback });
+    this._events.on(event, callback);
   }
 
   // -- private ---------------------------------------------------------- //
@@ -184,26 +185,13 @@ class SocketTransport implements ITransportLib {
       return;
     }
 
-    this._socketSend({
-      topic: socketMessage.topic,
-      type: "ack",
-      payload: "",
-      silent: true,
-    });
-
     if (this._socket && this._socket.readyState === 1) {
-      const events = this._events.filter(event => event.event === "message");
-      if (events && events.length) {
-        events.forEach(event => event.callback(socketMessage));
-      }
+      this._events.emit("message", socketMessage);
     }
   }
 
-  private _socketError(e: Event) {
-    const events = this._events.filter(event => event.event === "error");
-    if (events && events.length) {
-      events.forEach(event => event.callback(e));
-    }
+  private _socketError(event: Event) {
+    this._events.emit("error", event);
   }
 
   private _queueSubscriptions() {
