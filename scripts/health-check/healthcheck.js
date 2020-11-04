@@ -47,7 +47,9 @@ class HealthChecker {
    * @param opts
    */
   createConnector(opts) {
+    console.log("createConnector(opts)", opts); // eslint-disable-line no-console
     const connector = new WalletConnect(opts);
+    console.log("CONNECTOR CREATED", opts); // eslint-disable-line no-console
     return connector;
   }
 
@@ -61,10 +63,11 @@ class HealthChecker {
     if (err) {
       this.fail(err);
     }
+    console.log("onDisplayURI(err, payload)", payload); // eslint-disable-line no-console
 
     this.uri = payload.params[0];
 
-    // Let's trigger the process to have another client to join the same session
+    // Let`s trigger the process to have another client to join the same session
     if (this.uri) {
       this.connectToSession(this.uri);
       return;
@@ -84,10 +87,29 @@ class HealthChecker {
     // For joining, we give URI instead of a bridge server
     this.responder = this.createConnector({ uri });
     this.responder.on("session_request", (err, payload) => {
+      console.log("[responder]", "session_request", payload); // eslint-disable-line no-console
+
       this.onSessionRequest(err, payload);
     });
     this.responder.on("ping", (err, payload) => {
+      console.log("[responder]", "ping", payload); // eslint-disable-line no-console
+
       this.onPing(err, payload);
+    });
+    this.responder.on("error", (err, payload) => {
+      console.log("[responder]", "error", payload); // eslint-disable-line no-console
+    });
+    this.responder.on("transport_open", (err, payload) => {
+      console.log("[responder]", "transport_open", payload); // eslint-disable-line no-console
+    });
+    this.responder.on("transport_close", (err, payload) => {
+      console.log("[responder]", "transport_close", payload); // eslint-disable-line no-console
+    });
+    this.responder.on("transport_message", (err, payload) => {
+      console.log("[responder]", "transport_message", payload); // eslint-disable-line no-console
+    });
+    this.responder.on("transport_error", (err, payload) => {
+      console.log("[responder]", "transport_error", payload); // eslint-disable-line no-console
     });
     this.responder.createSession();
   }
@@ -103,7 +125,7 @@ class HealthChecker {
       this.fail(err);
     }
 
-    this.log("Session requested", payload);
+    console.log("Session requested", payload); // eslint-disable-line no-console
 
     // Use dummy chain parameters, as we are not really connected to any blockchain
     const approvalParams = {
@@ -125,7 +147,8 @@ class HealthChecker {
     if (err) {
       this.fail(err);
     }
-    this.log("Connected", payload);
+    console.log("onConnect(err, payload)", payload); // eslint-disable-line no-console
+    console.log("Connected", payload); // eslint-disable-line no-console
     this.sendPing();
   }
 
@@ -139,7 +162,8 @@ class HealthChecker {
     if (err) {
       this.fail(err);
     }
-    this.log("Session updated", payload);
+    console.log("onSessionUpdate(err, payload)", payload); // eslint-disable-line no-console
+    console.log("Session updated", payload); // eslint-disable-line no-console
   }
 
   /**
@@ -152,7 +176,7 @@ class HealthChecker {
     if (err) {
       this.fail(err);
     }
-    this.log("Ping received", payload);
+    console.log("Ping received", payload); // eslint-disable-line no-console
 
     // All seems to be good
     this.onFinish({
@@ -177,15 +201,33 @@ class HealthChecker {
       bridge: "https://bridge.walletconnect.org",
     });
     this.initiator.on("display_uri", (err, payload) => {
+      console.log(`this.initiator.on("display_uri")`, payload); // eslint-disable-line no-console
       this.onDisplayURI(err, payload);
     });
     this.initiator.on("connect", (err, payload) => {
+      console.log(`this.initiator.on("connect")`, payload); // eslint-disable-line no-console
       this.onConnect(err, payload);
     });
     this.initiator.on("session_update", (err, payload) => {
+      console.log(`this.initiator.on("session_update")`, payload); // eslint-disable-line no-console
       this.onSessionUpdate(err, payload);
     });
-    this.log("Creating session");
+    this.initiator.on("error", (err, payload) => {
+      console.log("[initiator]", "error", payload); // eslint-disable-line no-console
+    });
+    this.initiator.on("transport_open", (err, payload) => {
+      console.log("[initiator]", "transport_open", payload); // eslint-disable-line no-console
+    });
+    this.initiator.on("transport_close", (err, payload) => {
+      console.log("[initiator]", "transport_close", payload); // eslint-disable-line no-console
+    });
+    this.initiator.on("transport_message", (err, payload) => {
+      console.log("[initiator]", "transport_message", payload); // eslint-disable-line no-console
+    });
+    this.initiator.on("transport_error", (err, payload) => {
+      console.log("[initiator]", "transport_error", payload); // eslint-disable-line no-console
+    });
+    console.log("Creating session"); // eslint-disable-line no-console
     this.initiator.createSession();
   }
 
@@ -195,6 +237,8 @@ class HealthChecker {
    * @param timeout Timeout in milliseconds
    */
   static async run(timeout, log) {
+    console.log(`run(timeout, log)`, timeout); // eslint-disable-line no-console
+
     const checker = new Promise(resolve => {
       const checker = new HealthChecker(timeout, resolve, log);
       checker.start();

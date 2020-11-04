@@ -46,6 +46,7 @@ import {
   isMobile,
   removeLocal,
   isJsonRpcRequest,
+  isReservedEvent,
 } from "@walletconnect/utils";
 import SocketTransport from "@walletconnect/socket-transport";
 import {
@@ -933,31 +934,57 @@ class Connector implements IConnector {
   }
 
   private async _handleIncomingMessages(socketMessage: ISocketMessage) {
-    const activeTopics = [this.clientId, this.handshakeTopic];
-
-    if (!activeTopics.includes(socketMessage.topic)) {
-      return;
-    }
-
-    let encryptionPayload: IEncryptionPayload;
     try {
-      encryptionPayload = JSON.parse(socketMessage.payload);
-    } catch (error) {
-      return;
-    }
+      const activeTopics = [this.clientId, this.handshakeTopic];
 
-    const payload:
-      | IJsonRpcRequest
-      | IJsonRpcResponseSuccess
-      | IJsonRpcResponseError
-      | null = await this._decrypt(encryptionPayload);
-
-    if (payload) {
-      if (isJsonRpcRequest(payload)) {
-        this._events.emit("call_request", payload);
-      } else if (isJsonRpcResponseSuccess(payload) || isJsonRpcResponseError(payload)) {
-        this._events.emit(`response:${payload.id}`, payload);
+      if (!activeTopics.includes(socketMessage.topic)) {
+        return;
       }
+
+      let encryptionPayload: IEncryptionPayload;
+      try {
+        encryptionPayload = JSON.parse(socketMessage.payload);
+      } catch (error) {
+        return;
+      }
+
+      const payload:
+        | IJsonRpcRequest
+        | IJsonRpcResponseSuccess
+        | IJsonRpcResponseError
+        | null = await this._decrypt(encryptionPayload);
+      console.log("[_handleIncomingMessages]", "payload", payload); // eslint-disable-line no-console
+      if (payload) {
+        if (isJsonRpcRequest(payload)) {
+          if (isReservedEvent(payload.method)) {
+            this._events.emit(payload.method, payload);
+          } else {
+            this._events.emit("call_request", payload);
+          }
+        } else if (isJsonRpcResponseSuccess(payload) || isJsonRpcResponseError(payload)) {
+          this._events.emit(`response:${payload.id}`, payload);
+        }
+      } else {
+        this._events.emit("error", {
+          event: "error",
+          params: [
+            {
+              code: "INVALID_INCOMING_MESSAGE",
+              message: "Incoming message is invalid",
+            },
+          ],
+        });
+      }
+    } catch (e) {
+      this._events.emit("error", {
+        event: "error",
+        params: [
+          {
+            code: "INVALID_INCOMING_MESSAGE",
+            message: e.message,
+          },
+        ],
+      });
     }
   }
 
@@ -1060,9 +1087,13 @@ class Connector implements IConnector {
   }
 
   private _initTransport() {
-    this._transport.on("message", (socketMessage: ISocketMessage) =>
-      this._handleIncomingMessages(socketMessage),
-    );
+    this._transport.on("message", (socketMessage: ISocketMessage) => {
+      this._events.emit("transport_message", {
+        event: "transport_message",
+        params: [socketMessage],
+      }),
+        this._handleIncomingMessages(socketMessage);
+    });
 
     this._transport.on("open", () =>
       this._events.emit("transport_open", { event: "transport_open", params: [] }),
