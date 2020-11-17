@@ -1,4 +1,7 @@
+import BN from "bn.js";
+
 import * as encUtils from "enc-utils";
+import { addHexPrefix, removeHexPrefix, sanitizeHex } from "./misc";
 
 // -- ArrayBuffer ------------------------------------------ //
 
@@ -15,7 +18,7 @@ export function convertArrayBufferToHex(arrBuf: ArrayBuffer, noPrefix?: boolean)
 }
 
 export function convertArrayBufferToNumber(arrBuf: ArrayBuffer): number {
-  return encUtils.arrayToNumber(new Uint8Array(arrBuf));
+  return convertHexToNumber(encUtils.arrayToHex(new Uint8Array(arrBuf)));
 }
 
 export function concatArrayBuffers(...args: ArrayBuffer[]): ArrayBuffer {
@@ -59,7 +62,7 @@ export function convertUtf8ToHex(utf8: string, noPrefix?: boolean): string {
 }
 
 export function convertUtf8ToNumber(utf8: string): number {
-  return encUtils.utf8ToNumber(utf8);
+  return new BN(utf8, 10).toNumber();
 }
 
 // -- Hex -------------------------------------------------- //
@@ -77,23 +80,24 @@ export function convertHexToUtf8(hex: string): string {
 }
 
 export function convertHexToNumber(hex: string): number {
-  return encUtils.hexToNumber(hex);
+  return new BN(removeHexPrefix(hex), "hex").toNumber();
 }
 
 // -- Number ----------------------------------------------- //
 
 export function convertNumberToBuffer(num: number): Buffer {
-  return encUtils.numberToBuffer(num);
+  return encUtils.hexToBuffer(convertNumberToHex(num));
 }
 
 export function convertNumberToArrayBuffer(num: number): ArrayBuffer {
-  return encUtils.numberToArray(num).buffer;
+  return encUtils.hexToArray(convertNumberToHex(num));
 }
 
 export function convertNumberToUtf8(num: number): string {
-  return encUtils.numberToUtf8(num);
+  return new BN(num).toString();
 }
 
 export function convertNumberToHex(num: number | string, noPrefix?: boolean): string {
-  return encUtils.numberToHex(num, !noPrefix);
+  const hex = removeHexPrefix(sanitizeHex(new BN(num).toString(16)));
+  return noPrefix ? hex : addHexPrefix(hex);
 }
